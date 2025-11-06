@@ -30,7 +30,8 @@ def read_stave_data(staveid, data_directory):
     for feeid in feeids:
         gbt_channel = feeids.index(feeid)
         file_thrs = "ls " + data_directory + f"/*FEEID{feeid}_thrs.dat"
-        file_rmss = "ls " + data_directory + f"/*FEEID{feeid}_rmss.dat"
+        # file_rmss = "ls " + data_directory + f"/*FEEID{feeid}_rmss.dat"
+        file_rmss = "ls " + data_directory + f"/*FEEID{feeid}_tnoise.dat"
         # get filename
         thrmap_file = os.popen(file_thrs).read().strip().split("\n")[0]
         rmsmap_file = os.popen(file_rmss).read().strip().split("\n")[0]
@@ -302,7 +303,8 @@ if __name__ == "__main__":
 
     print(f"Thresholds saved to {thrs_file}")
 
-    rms_file = f"{args.o}/mvtx{args.felix}_rms.txt"
+    # rms_file = f"{args.o}/mvtx{args.felix}_rms.txt"
+    rms_file = f"{args.o}/mvtx{args.felix}_tnoise.txt"
     with open(rms_file, "w") as f:
         for stave in staveids:
             stave_idx = staveids.index(stave)
@@ -310,7 +312,8 @@ if __name__ == "__main__":
             std_rms = all_rms_std[stave_idx]
             f.write(f"{stave}: {mean_rms:.2f} e$^-$ $\\pm$ {std_rms:.2f} e$^-$\n")
 
-    print(f"RMS values saved to {rms_file}")
+    # print(f"RMS values saved to {rms_file}")
+    print(f"Temporal noise values saved to {rms_file}")
 
     sys.exit(0)
 # End of script

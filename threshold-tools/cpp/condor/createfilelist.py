@@ -28,7 +28,7 @@ FEEIDs = [
 ]
 
 # Setup
-runs = [72324]
+runs = [76388, 76389, 76390]
 Nsegments = 1
 runtype = "calib"
 filenames = []
@@ -44,9 +44,13 @@ for flx in range(6):
                         runtype, runtype, flx, run, seg
                     )
 
-                    # check if the file exists, skip if not
                     if not os.path.isfile(filename):
-                        print("File {} does not exist".format(filename))
+                        filename = "/sphenix/lustre01/sphnxpro/fromhpss/physics_2025/MVTX/{}/{}_mvtx{}-{:08d}-{:04d}.evt".format(
+                            runtype, runtype, flx, run, seg
+                        )
+
+                    if not os.path.isfile(filename):
+                        print("File {} does not exist in either location".format(filename))
                         continue
 
                     prefix = "{}_{:08d}_{:04d}_FEEID{}".format(

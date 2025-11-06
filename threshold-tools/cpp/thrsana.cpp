@@ -1,7 +1,3 @@
-/* Compile with:
-gcc --std=gnu99 -march=native -lm -O3 -o decoder decoder.c
-*/
-
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -18,6 +14,7 @@ gcc --std=gnu99 -march=native -lm -O3 -o decoder decoder.c
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <limits>
 
 #include <immintrin.h>
 #include <mm_malloc.h>
@@ -232,6 +229,63 @@ static inline void threshold_next_charge(float *sumd, float *sumd2, int ch, int 
         float m = meandV * dn / ddV;
         sumd[x] += den;
         sumd2[x] += m;
+    }
+}
+
+// temporal-noise
+static inline void tnoise_accumulate(float *S0,           //
+                                     float *S1,           //
+                                     float *S2,           //
+                                     int ch,              //
+                                     const int *lasthist, //
+                                     const int *hist,     //
+                                     int ninj,            //
+                                     int npix /* = nChipsPerLane*1024 */)
+{
+    const float invN = 1.0f / static_cast<float>(ninj);
+    const float c_mid = static_cast<float>(ch) - 0.5f;
+
+    for (int x = 0; x < npix; ++x)
+    {
+        float dn = static_cast<float>(hist[x] - lasthist[x]) * invN;
+        if (dn <= 0.0f)
+            continue;                // suppress small negative fluctuations
+        S0[x] += dn;                 // total weight (area of derivative)
+        S1[x] += dn * c_mid;         // first moment
+        S2[x] += dn * c_mid * c_mid; // second moment
+    }
+}
+
+static inline void tnoise_finalize_row(float *thr_mu_map, //
+                                       float *tnoise_map, //
+                                       const float *S0,   //
+                                       const float *S1,   //
+                                       const float *S2,   //
+                                       int row,           //
+                                       int nChipsPerLane  //
+)
+{
+    const int stride = nChipsPerLane * 1024;
+    float *mu_row = thr_mu_map + row * stride;
+    float *sig_row = tnoise_map + row * stride;
+
+    for (int x = 0; x < stride; ++x)
+    {
+        const float s0 = S0[x];
+        if (s0 > 0.0f)
+        {
+            const float mu = S1[x] / s0;
+            float var = (S2[x] / s0) - mu * mu;
+            if (var < 0.0f)
+                var = 0.0f; // numerical safety
+            mu_row[x] = mu;
+            sig_row[x] = std::sqrt(var);
+        }
+        else
+        {
+            mu_row[x] = std::numeric_limits<float>::quiet_NaN();
+            sig_row[x] = std::numeric_limits<float>::quiet_NaN();
+        }
     }
 }
 
@@ -939,6 +993,17 @@ void run_thrs_tuning(struct decoder_t *decoder, string &prefix, const int &n_vca
     int *rowhist = reinterpret_cast<int *>(_mm_malloc((nChipsPerLane * 1024 + 1) * sizeof(int), 4096));
     int *lastrowhist = reinterpret_cast<int *>(_mm_malloc((nChipsPerLane * 1024 + 1) * sizeof(int), 4096));
 
+    float *thr_mu  = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * n_row * 1024 * sizeof(float), 4096));
+    float *tnoise  = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * n_row * 1024 * sizeof(float), 4096));
+    float *S0      = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * 1 * 1024 * sizeof(float), 4096));
+    float *S1      = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * 1 * 1024 * sizeof(float), 4096));
+    float *S2      = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * 1 * 1024 * sizeof(float), 4096));
+    bzero(thr_mu,  nChipsPerLane * n_row * 1024 * sizeof(float));
+    bzero(tnoise,  nChipsPerLane * n_row * 1024 * sizeof(float));
+    bzero(S0,      nChipsPerLane * 1 * 1024 * sizeof(float));
+    bzero(S1,      nChipsPerLane * 1 * 1024 * sizeof(float));
+    bzero(S2,      nChipsPerLane * 1 * 1024 * sizeof(float));
+
     int ngood = 0;
     int nbad = 0;
     int iInj = 0;
@@ -970,6 +1035,9 @@ void run_thrs_tuning(struct decoder_t *decoder, string &prefix, const int &n_vca
                 nbad = 0;
                 bzero(sumd, nChipsPerLane * 1024 * sizeof(float));
                 bzero(sumd2, nChipsPerLane * 1024 * sizeof(float));
+                bzero(S0, nChipsPerLane * 1024 * sizeof(float));
+                bzero(S1, nChipsPerLane * 1024 * sizeof(float));
+                bzero(S2, nChipsPerLane * 1024 * sizeof(float));
                 prev_row = iRow;
             }
             // only one strobe per HB for Threshold
@@ -992,6 +1060,8 @@ void run_thrs_tuning(struct decoder_t *decoder, string &prefix, const int &n_vca
                 if (iChg)
                 {
                     threshold_next_charge(sumd, sumd2, iChg, lastrowhist, rowhist, decoder->thscan_nInj);
+
+                    tnoise_accumulate(S0, S1, S2, iChg, lastrowhist, rowhist, decoder->thscan_nInj, nChipsPerLane * 1024);
                 }
                 int *tmp = lastrowhist;
                 lastrowhist = rowhist;
@@ -1004,6 +1074,7 @@ void run_thrs_tuning(struct decoder_t *decoder, string &prefix, const int &n_vca
                 printf("thscan_row %4d ", iRow);
                 iChg = 0;
                 threshold_next_row(thrs + iRow * nChipsPerLane * 1024, rmss + iRow * nChipsPerLane * 1024, sumd, sumd2, decoder->thscan_nChg, decoder->thscan_nInj);
+                tnoise_finalize_row(thr_mu, tnoise, S0, S1, S2, iRow, nChipsPerLane);
                 float m, merr, s, serr;
                 meanrms(&m, &merr, thrs + decoder->trigger.thscan_row * nChipsPerLane * 1024, nChipsPerLane * 1024);
                 meanrms(&s, &serr, rmss + decoder->trigger.thscan_row * nChipsPerLane * 1024, nChipsPerLane * 1024);
@@ -1011,10 +1082,21 @@ void run_thrs_tuning(struct decoder_t *decoder, string &prefix, const int &n_vca
                 if (decoder->isTun && iRow == 5)
                 {
                     ostringstream fname;
-                    fname << "./output/" << runnumber <<  "/" << prefix << ((prefix != "") ? "_" : "") << "thr_map_" << decoder->feeid;
+                    fname << "./output/" << runnumber << "/" << prefix << ((prefix != "") ? "_" : "") << "thr_map_" << decoder->feeid;
                     fname << "-" << n_vcasn_ithr << ".dat";
                     save_file(fname.str().data(), n_row, nChipsPerLane, thrs);
                     break;
+
+                    {
+                        ostringstream f2;
+                        f2 << "./output/" << runnumber << "/" << prefix << ((prefix != "") ? "_" : "") << "tnoise_map_" << decoder->feeid << "-" << n_vcasn_ithr << ".dat";
+                        save_file(f2.str(), n_row, nChipsPerLane, tnoise);
+                    }
+                    {
+                        ostringstream f3;
+                        f3 << "./output/" << runnumber << "/" << prefix << ((prefix != "") ? "_" : "") << "thrmu_map_" << decoder->feeid << "-" << n_vcasn_ithr << ".dat";
+                        save_file(f3.str(), n_row, nChipsPerLane, thr_mu);
+                    }
                 }
             }
         }
@@ -1029,12 +1111,12 @@ void run_thrs_tuning(struct decoder_t *decoder, string &prefix, const int &n_vca
     if (!decoder->isTun)
     {
         ostringstream fname;
-        fname << "./output/" << runnumber <<  "/" << prefix << ((prefix != "") ? "_" : "") << "thr_map_" << decoder->feeid << ".dat";
+        fname << "./output/" << runnumber << "/" << prefix << ((prefix != "") ? "_" : "") << "thr_map_" << decoder->feeid << ".dat";
         save_file(fname.str(), n_row, nChipsPerLane, thrs);
 
         fname.str("");
         fname.clear();
-        fname << "./output/" << runnumber <<  "/" << prefix << ((prefix != "") ? "_" : "") << "rtn_map_" << decoder->feeid << ".dat";
+        fname << "./output/" << runnumber << "/" << prefix << ((prefix != "") ? "_" : "") << "rtn_map_" << decoder->feeid << ".dat";
         save_file(fname.str(), n_row, nChipsPerLane, rmss);
     }
     printStat(nHB, nHB_with_data, nStrobe);
@@ -1044,6 +1126,12 @@ void run_thrs_tuning(struct decoder_t *decoder, string &prefix, const int &n_vca
     _mm_free(sumd);
     _mm_free(rmss);
     _mm_free(thrs);
+
+    _mm_free(S2);
+    _mm_free(S1);
+    _mm_free(S0);
+    _mm_free(tnoise);
+    _mm_free(thr_mu);
 }
 
 void run_thrs_scan(struct decoder_t *decoder, string &prefix)
@@ -1058,6 +1146,17 @@ void run_thrs_scan(struct decoder_t *decoder, string &prefix)
     float *sumd2 = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * 1 * 1024 * sizeof(float), 4096));
     int *rowhist = reinterpret_cast<int *>(_mm_malloc((nChipsPerLane * 1024 + 1) * sizeof(int), 4096));
     int *lastrowhist = reinterpret_cast<int *>(_mm_malloc((nChipsPerLane * 1024 + 1) * sizeof(int), 4096));
+
+    float *thr_mu  = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * n_row * 1024 * sizeof(float), 4096));
+    float *tnoise  = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * n_row * 1024 * sizeof(float), 4096));
+    float *S0      = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * 1 * 1024 * sizeof(float), 4096));
+    float *S1      = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * 1 * 1024 * sizeof(float), 4096));
+    float *S2      = reinterpret_cast<float *>(_mm_malloc(nChipsPerLane * 1 * 1024 * sizeof(float), 4096));
+    bzero(thr_mu,  nChipsPerLane * n_row * 1024 * sizeof(float));
+    bzero(tnoise,  nChipsPerLane * n_row * 1024 * sizeof(float));
+    bzero(S0,      nChipsPerLane * 1 * 1024 * sizeof(float));
+    bzero(S1,      nChipsPerLane * 1 * 1024 * sizeof(float));
+    bzero(S2,      nChipsPerLane * 1 * 1024 * sizeof(float));
 
     int ngood = 0;
     int nbad = 0;
@@ -1085,6 +1184,10 @@ void run_thrs_scan(struct decoder_t *decoder, string &prefix)
                 nbad = 0;
                 bzero(sumd, nChipsPerLane * 1024 * sizeof(float));
                 bzero(sumd2, nChipsPerLane * 1024 * sizeof(float));
+
+                bzero(S0, nChipsPerLane * 1024 * sizeof(float));
+                bzero(S1, nChipsPerLane * 1024 * sizeof(float));
+                bzero(S2, nChipsPerLane * 1024 * sizeof(float));
                 prev_row = iRow;
             }
 
@@ -1108,6 +1211,7 @@ void run_thrs_scan(struct decoder_t *decoder, string &prefix)
                 if (iChg)
                 {
                     threshold_next_charge(sumd, sumd2, iChg, lastrowhist, rowhist, decoder->thscan_nInj);
+                    tnoise_accumulate(S0, S1, S2, iChg, lastrowhist, rowhist, decoder->thscan_nInj, nChipsPerLane * 1024);
                 }
                 int *tmp = lastrowhist;
                 lastrowhist = rowhist;
@@ -1119,6 +1223,7 @@ void run_thrs_scan(struct decoder_t *decoder, string &prefix)
             {
                 iChg = 0;
                 threshold_next_row(thrs + iRow * nChipsPerLane * 1024, rmss + iRow * nChipsPerLane * 1024, sumd, sumd2, decoder->thscan_nChg, decoder->thscan_nInj);
+                tnoise_finalize_row(thr_mu, tnoise, S0, S1, S2, iRow, nChipsPerLane);
                 float m, merr, s, serr;
                 meanrms(&m, &merr, thrs + decoder->trigger.thscan_row * nChipsPerLane * 1024, nChipsPerLane * 1024);
                 meanrms(&s, &serr, rmss + decoder->trigger.thscan_row * nChipsPerLane * 1024, nChipsPerLane * 1024);
@@ -1134,12 +1239,23 @@ void run_thrs_scan(struct decoder_t *decoder, string &prefix)
     }
 
     ostringstream fname;
-    fname << "./output/" << runnumber <<  "/" << prefix << "_thrs.dat";
+    fname << "./output/" << runnumber << "/" << prefix << "_thrs.dat";
     save_file(fname.str(), n_row, nChipsPerLane, thrs);
 
     ostringstream fnamerms;
-    fnamerms << "./output/" << runnumber <<  "/" << prefix << "_rmss.dat";
+    fnamerms << "./output/" << runnumber << "/" << prefix << "_rmss.dat";
     save_file(fnamerms.str(), n_row, nChipsPerLane, rmss);
+
+    {
+        ostringstream f2;
+        f2 << "./output/" << runnumber << "/" << prefix << "_tnoise.dat";
+        save_file(f2.str(), n_row, nChipsPerLane, tnoise);
+    }
+    {
+        ostringstream f3;
+        f3 << "./output/" << runnumber << "/" << prefix << "_thrmu.dat";
+        save_file(f3.str(), n_row, nChipsPerLane, thr_mu);
+    }
 
     printStat(nHB, nHB_with_data, nStrobe);
     _mm_free(lastrowhist);
@@ -1148,6 +1264,12 @@ void run_thrs_scan(struct decoder_t *decoder, string &prefix)
     _mm_free(sumd);
     _mm_free(rmss);
     _mm_free(thrs);
+
+    _mm_free(S2);
+    _mm_free(S1);
+    _mm_free(S0);
+    _mm_free(tnoise);
+    _mm_free(thr_mu);
 }
 
 void run_badpix_scan(struct decoder_t *decoder, string &prefix)
@@ -1201,7 +1323,7 @@ void run_badpix_scan(struct decoder_t *decoder, string &prefix)
     std::cout << std::endl;
 
     ostringstream fname;
-    fname << "./output/" << runnumber <<  "/" << prefix << "_deadpix.dat";
+    fname << "./output/" << runnumber << "/" << prefix << "_deadpix.dat";
     ofstream fhitmap(fname.str().data(), ios_base::trunc);
     fhitmap.write(reinterpret_cast<char *>(hitmap), decoder->nlanes * 1024 * 512 * sizeof(uint32_t));
     fhitmap.close();

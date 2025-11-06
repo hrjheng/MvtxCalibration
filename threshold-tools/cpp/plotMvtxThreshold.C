@@ -144,7 +144,7 @@ void plotMvtxThreshold(std::string inputfiledir)
         std::string fname = inputfiledir + "/mvtx" + std::to_string(flx) + "_thresholds.txt";
         readthreshold(fname, thrsmap);
         // read the rmss from the file
-        std::string fname_rms = inputfiledir + "/mvtx" + std::to_string(flx) + "_rms.txt";
+        std::string fname_rms = inputfiledir + "/mvtx" + std::to_string(flx) + "_tnoise.txt";
         readthreshold(fname_rms, rmsmap);
     }
 
@@ -204,7 +204,8 @@ void plotMvtxThreshold(std::string inputfiledir)
             avg_x += px[i] / 4;
             avg_y += py[i] / 4;
         }
-        h_rms->SetBinContent(mapstave[layer][staveid], std::sqrt(rmss));
+        // h_rms->SetBinContent(mapstave[layer][staveid], std::sqrt(rmss));
+        h_rms->SetBinContent(mapstave[layer][staveid], rmss);
         h_rms->SetBinError(mapstave[layer][staveid], stddev);
         delete[] px;
         delete[] py;

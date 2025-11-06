@@ -5,6 +5,7 @@ std::string inputdir = "./results";
 #include <vector>
 
 bool verbose = false; // set to true to print debug information
+std::string prelimtext = "Internal";
 
 std::map<std::string, std::vector<std::string>> stave_map = {
     {"0", {"L0_03", "L0_04", "L2_01", "L2_02", "L0_05", "L2_03", "L2_04", "L2_15"}}, //
@@ -93,7 +94,7 @@ void MvtxThreshold_TimeSeries()
     }
 
     std::map<std::string, std::vector<std::vector<float>>> map_layer_thresholds; // to store thresholds for each layer for each time point
-    std::map<std::string, std::vector<std::vector<float>>> map_layer_rms;       // to store rms (noise) for each layer for each time point
+    std::map<std::string, std::vector<std::vector<float>>> map_layer_rms;        // to store rms (noise) for each layer for each time point
 
     // loop over all directories in inputdir
     for (const auto &entry : std::filesystem::directory_iterator(inputdir))
@@ -148,21 +149,45 @@ void MvtxThreshold_TimeSeries()
                     || (run_number == "69683" && (mvtx_id == 0 || mvtx_id == 1 || mvtx_id == 3 || mvtx_id == 4 || mvtx_id == 5)) // skip mvtx_id 0, 1, 3, 4, and 5 for run 69683
                     || (run_number == "71240" && (mvtx_id == 1))                                                                 // skip mvtx_id 1 for run 71240
                     || (run_number == "71241" && (mvtx_id == 0 || mvtx_id == 2 || mvtx_id == 3 || mvtx_id == 4 || mvtx_id == 5)) // skip mvtx_id 0, 2, 3, 4, and 5 for run 71241
-                    || (run_number == "71526") // skip run 71526 fully (since we have run 71528)
-                    || (run_number == "71527") // skip run 71527 fully (since we have run 71528)
-                    || (run_number == "71790") // skip run 71528 fully (since we have run 71529)
-                    || (run_number == "71792") // skip run 71792 fully (since we have run 71793)
-                    || (run_number == "71793") // skip run 71793 fully
-                    || (run_number == "71877") // skip run 71877 fully
-                    || (run_number == "71878") // skip run 71878 fully
-                    || (run_number == "71879") // skip run 71879 fully (since we have run 71880)
-                    || (run_number == "72011") // skip run 72011 fully
-                    || (run_number == "72012") // skip run 72012 fully
-                    || (run_number == "72013") // skip run 72013 fully
-                    || (run_number == "72014") // skip run 72014 fully
-                    || (run_number == "72015") // skip run 72015 fully
-                    || (run_number == "72321") // skip run 72321 fully
-                    || (run_number == "72324") // skip run 72324 fully
+                    || (run_number == "71526")                                                                                   // skip run 71526 fully (since we have run 71528)
+                    || (run_number == "71527")                                                                                   // skip run 71527 fully (since we have run 71528)
+                    || (run_number == "71790")                                                                                   // skip run 71528 fully (since we have run 71529)
+                    || (run_number == "71792")                                                                                   // skip run 71792 fully (since we have run 71793)
+                    || (run_number == "71793")                                                                                   // skip run 71793 fully
+                    || (run_number == "71877")                                                                                   // skip run 71877 fully
+                    || (run_number == "71878")                                                                                   // skip run 71878 fully
+                    || (run_number == "71879")                                                                                   // skip run 71879 fully (since we have run 71880)
+                    || (run_number == "72011")                                                                                   // skip run 72011 fully
+                    || (run_number == "72012")                                                                                   // skip run 72012 fully
+                    || (run_number == "72013")                                                                                   // skip run 72013 fully
+                    || (run_number == "72014")                                                                                   // skip run 72014 fully
+                    || (run_number == "72015")                                                                                   // skip run 72015 fully
+                    || (run_number == "72321")                                                                                   // skip run 72321 fully
+                    || (run_number == "72324")                                                                                   // skip run 72324 fully
+                    || (run_number == "72555")                                                                                   //
+                    || (run_number == "72556")                                                                                   //
+                    || (run_number == "72558")                                                                                   //
+                    || (run_number == "72803")                                                                                   //
+                    || (run_number == "72805")                                                                                   //
+                    || (run_number == "73072")                                                                                   //
+                    || (run_number == "73073")                                                                                   //
+                    || (run_number == "73075")                                                                                   //
+                    || (run_number == "73489")                                                                                   //
+                    || (run_number == "73491")                                                                                   //
+                    || (run_number == "74426")                                                                                   //
+                    || (run_number == "74428")                                                                                   //
+                    || (run_number == "74583")                                                                                   //
+                    || (run_number == "74585")                                                                                   //
+                    || (run_number == "74649")                                                                                   //
+                    || (run_number == "74651")                                                                                   //
+                    || (run_number == "75038")                                                                                   //
+                    || (run_number == "75039")                                                                                   //
+                    || (run_number == "75761")                                                                                   //
+                    || (run_number == "75763")                                                                                   //
+                    || (run_number == "75853")                                                                                   //
+                    || (run_number == "75857")                                                                                   //
+                    || (run_number == "76388")                                                                                   //
+                    || (run_number == "76390")                                                                                   //
                 )
                 {
                     continue;
@@ -171,7 +196,7 @@ void MvtxThreshold_TimeSeries()
                 std::string mvtx_key = std::to_string(mvtx_id);
                 std::string mvtx_file = inputdir + "/" + dir_name + "/mvtx" + mvtx_key + "_thresholds.txt";
                 readthreshold(mvtx_file, thrsmap);
-                std::string mvtx_rms_file = inputdir + "/" + dir_name + "/mvtx" + mvtx_key + "_rms.txt";
+                std::string mvtx_rms_file = inputdir + "/" + dir_name + "/mvtx" + mvtx_key + "_tnoise.txt";
                 readthreshold(mvtx_rms_file, rmsmap);
 
                 for (const auto &pair : stave_thrs_timeseries)
@@ -204,10 +229,11 @@ void MvtxThreshold_TimeSeries()
                     const std::string &stave = pair.first;
                     if (rmsmap.find(stave) != rmsmap.end())
                     {
-                        double rms = std::sqrt(rmsmap[stave].first); // convert variance to rms
+                        // double rms = std::sqrt(rmsmap[stave].first); // convert variance to rms
+                        double rms = rmsmap[stave].first;
                         pair.second->AddPoint(dataPnt.Convert(), rms);
                         if (verbose)
-                            std::cout << "Stave: " << stave << ", RMS: " << rms << " at " << dataPnt.AsString() << std::endl;
+                            std::cout << "Stave: " << stave << ", temporal noise: " << rms << " at " << dataPnt.AsString() << std::endl;
 
                         for (int layer = 0; layer < 3; ++layer)
                         {
@@ -382,6 +408,77 @@ void MvtxThreshold_TimeSeries()
     c->SaveAs(Form("%s/MvtxThreshold_TimeSeries.pdf", inputdir.c_str()));
     c->SaveAs(Form("%s/MvtxThreshold_TimeSeries.png", inputdir.c_str()));
 
+    // Similar plot for RMS (temporal noise)
+    TCanvas *c_rms_allstave = new TCanvas("c_rms_allstave", "RMS All Stave", 1200, 700);
+    pad_layer0->Draw();
+    pad_layer1->Draw();
+    pad_layer2->Draw();
+    pad_layer0->cd();
+    dummy_graph_layer0->GetYaxis()->SetRangeUser(rms_lower_bound, rms_upper_bound);
+    dummy_graph_layer0->Draw("AP");
+    padlabel_layer0->DrawLatex(pad_layer0->GetLeftMargin() + 0.04, (1 - pad_layer0->GetTopMargin()) - 0.08, "Layer 0");
+    pad_layer1->cd();
+    dummy_graph_layer1->GetYaxis()->SetRangeUser(rms_lower_bound, rms_upper_bound);
+    dummy_graph_layer1->Draw("AP");
+    padlabel_layer1->DrawLatex(pad_layer1->GetLeftMargin() + 0.04, (1 - pad_layer1->GetTopMargin()) - 0.08, "Layer 1");
+    pad_layer2->cd();
+    dummy_graph_layer2->GetYaxis()->SetRangeUser(rms_lower_bound, rms_upper_bound);
+    dummy_graph_layer2->Draw("AP");
+    padlabel_layer2->DrawLatex(pad_layer2->GetLeftMargin() + 0.04, (1 - pad_layer2->GetTopMargin()) - 0.08, "Layer 2");
+    // Loop over the stave_rms_timeseries map and draw the graphs in the corresponding pads
+    for (const auto &pair : stave_rms_timeseries)
+    {
+        const std::string &stave = pair.first;
+        int layer = std::stoi(stave.substr(1, 1));
+        int stave_id = std::stoi(stave.substr(3, 2));
+        std::string mvtx_key;
+        for (const auto &kv : stave_map)
+        {
+            if (std::find(kv.second.begin(), kv.second.end(), stave) != kv.second.end())
+            {
+                mvtx_key = kv.first;
+                break;
+            }
+        }
+
+        if (layer == 0)
+        {
+            pad_layer0->cd();
+        }
+        else if (layer == 1)
+        {
+            pad_layer1->cd();
+        }
+        else if (layer == 2)
+        {
+            pad_layer2->cd();
+        }
+        else
+        {
+            std::cerr << "Error: Invalid layer " << layer << " for stave " << stave << ". Skipping." << std::endl;
+            continue;
+        }
+
+        pair.second->SetMarkerStyle(markers[stave_id]);
+        pair.second->SetMarkerSize(0.75);
+        pair.second->SetMarkerColor(TColor::GetColor(colors_mvtx[std::stoi(mvtx_key)].c_str()));
+        pair.second->SetLineColor(TColor::GetColor(colors_mvtx[std::stoi(mvtx_key)].c_str()));
+        pair.second->Draw("P same");
+    }
+
+    c_rms_allstave->RedrawAxis();
+    c_rms_allstave->cd();
+    ytitle->SetNDC();
+    ytitle->SetTextSize(0.04);
+    ytitle->SetTextAlign(kHAlignCenter + kVAlignCenter);
+    ytitle->SetTextAngle(90);
+    ytitle->DrawLatex(0.05, 0.5, "Average chip temporal noise (RMS) [e^{-}]");
+    leg_l0->Draw();
+    leg_l1->Draw();
+    leg_l2->Draw();
+    c_rms_allstave->SaveAs(Form("%s/MvtxRMS_TimeSeries.pdf", inputdir.c_str()));
+    c_rms_allstave->SaveAs(Form("%s/MvtxRMS_TimeSeries.png", inputdir.c_str()));
+
     // For the average threshold graphs, draw them in a new canvas
     // Calculate the average threshold for each layer for each time point
     // TGraphErrors for the layer average threshold
@@ -496,6 +593,18 @@ void MvtxThreshold_TimeSeries()
         leg_avg->AddEntry(grapherr_layer_avg[i], Form("Layer %d", i), "PEL");
     }
     leg_avg->Draw();
+    TLegend *sphnxleg = new TLegend(1 - gPad->GetRightMargin() - 0.33, //
+                                    (1 - gPad->GetTopMargin()) - 0.18, //
+                                    1 - gPad->GetRightMargin() - 0.13, //
+                                    (1 - gPad->GetTopMargin()) - 0.06  //
+    );
+    sphnxleg->SetTextAlign(kHAlignLeft + kVAlignCenter);
+    sphnxleg->SetTextSize(0.04);
+    sphnxleg->SetFillStyle(0);
+    sphnxleg->AddEntry("", Form("#it{#bf{sPHENIX}} %s", prelimtext.c_str()), "");
+    // sphnxleg->AddEntry("", "Au+Au #sqrt{s_{NN}}=200 GeV", "");
+    sphnxleg->AddEntry("", "Run2025", "");
+    sphnxleg->Draw();
     c_avg->SaveAs(Form("%s/MvtxThreshold_TimeSeries_LayerAverage.pdf", inputdir.c_str()));
     c_avg->SaveAs(Form("%s/MvtxThreshold_TimeSeries_LayerAverage.png", inputdir.c_str()));
 
@@ -531,6 +640,7 @@ void MvtxThreshold_TimeSeries()
     c_rms->RedrawAxis();
     // can use the same legend as above
     leg_avg->Draw();
+    sphnxleg->Draw();
     c_rms->SaveAs(Form("%s/MvtxRMS_TimeSeries_LayerAverage.pdf", inputdir.c_str()));
     c_rms->SaveAs(Form("%s/MvtxRMS_TimeSeries_LayerAverage.png", inputdir.c_str()));
 }

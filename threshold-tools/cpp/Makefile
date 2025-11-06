@@ -13,7 +13,7 @@ $(MERGER): $(MERGER).cpp
 	g++ --std=c++17 -march=native -gdwarf-4 -pedantic -Wall -O3 -o $(MERGER) $(MERGER).cpp -lm -g
 
 $(DECODER): $(DECODER).cpp $(DEPS)
-	g++ --std=c++17 -march=native -gdwarf-4 -pedantic -Wall -O3 -o $(DECODER) $(DECODER).cpp -lm -g
+	g++ --std=c++17 -march=native -mavx2 -gdwarf-4 -pedantic -Wall -O3 -o $(DECODER) $(DECODER).cpp -lm -g
 
 
 clean:
